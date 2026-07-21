@@ -1,87 +1,183 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSurvey } from '../../context/SurveyContext';
+import { useTheme } from '../../context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
+
+const PRIORITIES = ['Low', 'Medium', 'High'];
+const PRIORITY_COLORS = { Low: '#10b981', Medium: '#f59e0b', High: '#ef4444' };
 
 export default function NewSurveyScreen() {
   const router = useRouter();
-  const { updateDraft, draftSurvey } = useSurvey();
+  const { updateDraft, clearDraft } = useSurvey();
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
 
-  const [siteName, setSiteName] = useState(draftSurvey.siteName || '');
-  const [clientName, setClientName] = useState(draftSurvey.clientName || '');
-  const [description, setDescription] = useState(draftSurvey.description || '');
-  const [priority, setPriority] = useState(draftSurvey.priority || 'Medium');
+  const [siteName, setSiteName] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState('Medium');
+
+  const [siteNameError, setSiteNameError] = useState(false);
+  const [clientNameError, setClientNameError] = useState(false);
+  const [descriptionError, setDescriptionError] = useState(false);
+
+  // Every time this screen comes into focus, wipe the draft and reset all fields
+  // so a second new survey always starts completely empty.
+  useFocusEffect(
+    useCallback(() => {
+      clearDraft();
+      setSiteName('');
+      setClientName('');
+      setDescription('');
+      setPriority('Medium');
+      setSiteNameError(false);
+      setClientNameError(false);
+      setDescriptionError(false);
+    }, [])
+  );
 
   const handleNext = () => {
-    if (!siteName.trim() || !clientName.trim() || !description.trim()) {
-      Alert.alert('Validation Error', 'Please fill in all required fields.');
+    let hasError = false;
+
+    if (!siteName.trim()) {
+      setSiteNameError(true);
+      hasError = true;
+    } else {
+      setSiteNameError(false);
+    }
+
+    if (!clientName.trim()) {
+      setClientNameError(true);
+      hasError = true;
+    } else {
+      setClientNameError(false);
+    }
+
+    if (!description.trim()) {
+      setDescriptionError(true);
+      hasError = true;
+    } else {
+      setDescriptionError(false);
+    }
+
+    if (hasError) {
+      Alert.alert('Required Fields Missing', 'Please fill in all the required fields first.');
       return;
     }
 
     updateDraft({
-      siteName,
-      clientName,
-      description,
+      siteName: siteName.trim(),
+      clientName: clientName.trim(),
+      description: description.trim(),
       priority,
-      date: draftSurvey.date || new Date().toISOString()
+      date: draftSurvey.date || new Date().toISOString(),
     });
-
     router.push('/preview');
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Create New Survey</Text>
-      
-      <Text style={styles.label}>Site Name *</Text>
-      <TextInput style={styles.input} value={siteName} onChangeText={setSiteName} placeholder="Enter site name" />
+    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 50 }} showsVerticalScrollIndicator={false}>
+      <Text style={s.title}>New Survey</Text>
+      <Text style={s.subtitle}>Fill in all the required fields to proceed</Text>
 
-      <Text style={styles.label}>Client Name *</Text>
-      <TextInput style={styles.input} value={clientName} onChangeText={setClientName} placeholder="Enter client name" />
+      {/* Site Name */}
+      <Text style={s.label}>Site Name <Text style={{ color: theme.danger }}>*</Text></Text>
+      <View style={[s.inputWrapper, siteNameError && { borderColor: theme.danger }]}>
+        <Ionicons name="business-outline" size={18} color={siteNameError ? theme.danger : theme.textMuted} style={{ marginRight: 10 }} />
+        <TextInput
+          style={s.input}
+          value={siteName}
+          onChangeText={(val) => {
+            setSiteName(val);
+            updateDraft({ siteName: val });
+            if (val.trim()) setSiteNameError(false);
+          }}
+          placeholder="Enter site name"
+          placeholderTextColor={theme.textLight}
+        />
+      </View>
+      {siteNameError && <Text style={s.errorHelper}>Please fill in the Site Name</Text>}
 
-      <Text style={styles.label}>Description *</Text>
+      {/* Client Name */}
+      <Text style={s.label}>Client Name <Text style={{ color: theme.danger }}>*</Text></Text>
+      <View style={[s.inputWrapper, clientNameError && { borderColor: theme.danger }]}>
+        <Ionicons name="person-outline" size={18} color={clientNameError ? theme.danger : theme.textMuted} style={{ marginRight: 10 }} />
+        <TextInput
+          style={s.input}
+          value={clientName}
+          onChangeText={(val) => {
+            setClientName(val);
+            updateDraft({ clientName: val });
+            if (val.trim()) setClientNameError(false);
+          }}
+          placeholder="Enter client name"
+          placeholderTextColor={theme.textLight}
+        />
+      </View>
+      {clientNameError && <Text style={s.errorHelper}>Please fill in the Client Name</Text>}
+
+      {/* Description */}
+      <Text style={s.label}>Description <Text style={{ color: theme.danger }}>*</Text></Text>
       <TextInput
-        style={[styles.input, styles.textArea]}
+        style={[s.textArea, descriptionError && { borderColor: theme.danger }]}
         value={description}
-        onChangeText={setDescription}
-        placeholder="Enter description"
+        onChangeText={(val) => {
+          setDescription(val);
+          updateDraft({ description: val });
+          if (val.trim()) setDescriptionError(false);
+        }}
+        placeholder="Describe the survey location and purpose…"
+        placeholderTextColor={theme.textLight}
         multiline
-        numberOfLines={4} />
-      
+        numberOfLines={4}
+      />
+      {descriptionError && <Text style={s.errorHelper}>Please fill in the Description</Text>}
 
-      <Text style={styles.label}>Priority</Text>
-      <View style={styles.priorityContainer}>
-        {['Low', 'Medium', 'High'].map((level) =>
-        <TouchableOpacity
-          key={level}
-          style={[styles.priorityButton, priority === level && styles.prioritySelected]}
-          onPress={() => setPriority(level)}>
-          
-            <Text style={[styles.priorityText, priority === level && styles.priorityTextSelected]}>
-              {level}
-            </Text>
-          </TouchableOpacity>
-        )}
+      {/* Priority */}
+      <Text style={s.label}>Priority Level</Text>
+      <View style={s.priorityRow}>
+        {PRIORITIES.map((level) => {
+          const isSelected = priority === level;
+          const color = PRIORITY_COLORS[level];
+          return (
+            <TouchableOpacity
+              key={level}
+              style={[s.priorityBtn, isSelected && { backgroundColor: color, borderColor: color }]}
+              onPress={() => {
+                setPriority(level);
+                updateDraft({ priority: level });
+              }}>
+              <View style={[s.priorityDot, { backgroundColor: isSelected ? '#fff' : color }]} />
+              <Text style={[s.priorityBtnText, isSelected && { color: '#fff' }]}>{level}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-        <Text style={styles.nextButtonText}>Next (Preview & Submit)</Text>
+      {/* Next Button */}
+      <TouchableOpacity style={s.nextBtn} onPress={handleNext} activeOpacity={0.85}>
+        <Text style={s.nextBtnText}>Preview & Submit</Text>
+        <Ionicons name="arrow-forward" size={20} color="#fff" />
       </TouchableOpacity>
-    </ScrollView>);
-
+    </ScrollView>
+  );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 20 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  label: { fontSize: 16, fontWeight: '600', marginBottom: 8, marginTop: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 8, padding: 12, fontSize: 16 },
-  textArea: { height: 100, textAlignVertical: 'top' },
-  priorityContainer: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 8 },
-  priorityButton: { flex: 1, padding: 12, borderWidth: 1, borderColor: '#007AFF', borderRadius: 8, marginHorizontal: 4, alignItems: 'center' },
-  prioritySelected: { backgroundColor: '#007AFF' },
-  priorityText: { color: '#007AFF', fontWeight: '600' },
-  priorityTextSelected: { color: '#fff' },
-  nextButton: { backgroundColor: '#28a745', padding: 16, borderRadius: 8, alignItems: 'center', marginTop: 30, marginBottom: 50 },
-  nextButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' }
+const makeStyles = (theme) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg, padding: 20 },
+  title: { fontSize: 26, fontWeight: '800', color: theme.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: theme.textMuted, marginTop: 4, marginBottom: 24, fontWeight: '500' },
+  label: { fontSize: 14, fontWeight: '700', color: theme.textMuted, marginBottom: 8, marginTop: 16, textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.inputBg, borderWidth: 1, borderColor: theme.inputBorder, borderRadius: 12, paddingHorizontal: 14 },
+  input: { flex: 1, fontSize: 15, color: theme.text, paddingVertical: 14 },
+  textArea: { backgroundColor: theme.inputBg, borderWidth: 1, borderColor: theme.inputBorder, borderRadius: 12, padding: 14, fontSize: 15, color: theme.text, height: 120, textAlignVertical: 'top' },
+  priorityRow: { flexDirection: 'row', gap: 10, marginTop: 4 },
+  priorityBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 14, borderWidth: 1.5, borderColor: theme.border, borderRadius: 12, backgroundColor: theme.card },
+  priorityDot: { width: 8, height: 8, borderRadius: 4 },
+  priorityBtnText: { fontSize: 14, fontWeight: '700', color: theme.textMuted },
+  nextBtn: { flexDirection: 'row', backgroundColor: theme.primary, padding: 18, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 32 },
+  nextBtnText: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  errorHelper: { color: theme.danger, fontSize: 12, fontWeight: '600', marginTop: 4, marginLeft: 4 },
 });

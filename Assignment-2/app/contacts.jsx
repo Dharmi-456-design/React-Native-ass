@@ -1,34 +1,32 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Alert, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, Alert, RefreshControl, Platform } from 'react-native';
 import * as Contacts from 'expo-contacts';
 import * as Clipboard from 'expo-clipboard';
 import { useSurvey } from '../context/SurveyContext';
+import { useTheme } from '../context/ThemeContext';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function ContactsScreen() {
   const [contacts, setContacts] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const { updateDraft } = useSurvey();
+  const { theme } = useTheme();
   const router = useRouter();
+  const s = makeStyles(theme);
 
   const fetchContacts = async () => {
     const { status } = await Contacts.requestPermissionsAsync();
     if (status === 'granted') {
-      const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.PhoneNumbers]
-      });
-      if (data.length > 0) {
-        setContacts(data);
-      }
+      const { data } = await Contacts.getContactsAsync({ fields: [Contacts.Fields.PhoneNumbers] });
+      if (data.length > 0) setContacts(data);
     } else {
-      Alert.alert('Permission Denied', 'Cannot access contacts');
+      Alert.alert('Permission Denied', 'Cannot access contacts. Please allow in settings.');
     }
   };
 
-  useEffect(() => {
-    fetchContacts();
-  }, []);
+  useEffect(() => { fetchContacts(); }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -38,87 +36,103 @@ export default function ContactsScreen() {
 
   const copyToClipboard = async (number) => {
     await Clipboard.setStringAsync(number);
-    Alert.alert('Copied', 'Phone number copied to clipboard');
+    Alert.alert('Copied ✅', 'Phone number copied to clipboard.');
   };
 
   const handleSaveToSurvey = (contact, number) => {
-    updateDraft({
-      contact: { name: contact.name || 'Unknown', number }
-    });
-    Alert.alert('Saved', 'Contact attached to survey draft.');
-    router.back();
+    updateDraft({ contact: { name: contact.name || 'Unknown', number } });
+    if (Platform.OS === 'web') {
+      alert('Survey saved successfully!');
+      router.back();
+    } else {
+      Alert.alert('Success', 'Survey saved successfully!', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+    }
   };
 
-  const filteredContacts = contacts.filter((c) =>
-  c.name?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredContacts = contacts.filter(c =>
+    c.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const renderItem = ({ item }) => {
-    const number = item.phoneNumbers && item.phoneNumbers.length > 0 ? item.phoneNumbers[0].number : null;
-
+    const number = item.phoneNumbers?.[0]?.number || null;
+    const initials = item.name ? item.name.charAt(0).toUpperCase() : '?';
     return (
-      <View style={styles.card}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{item.name ? item.name.charAt(0).toUpperCase() : '?'}</Text>
+      <View style={s.card}>
+        <View style={s.avatar}>
+          <Text style={s.avatarText}>{initials}</Text>
         </View>
-        <View style={styles.info}>
-          <Text style={styles.name}>{item.name}</Text>
-          <Text style={styles.number}>{number || 'No Number'}</Text>
+        <View style={s.info}>
+          <Text style={s.name}>{item.name}</Text>
+          <Text style={s.number}>{number || 'No number'}</Text>
         </View>
-        <View style={styles.actions}>
-          {number &&
-          <>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => copyToClipboard(number)}>
-                <Text style={styles.actionText}>Copy</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.saveBtn]} onPress={() => handleSaveToSurvey(item, number)}>
-                <Text style={[styles.actionText, { color: 'white' }]}>Select</Text>
-              </TouchableOpacity>
-            </>
-          }
-        </View>
-      </View>);
-
+        {number && (
+          <View style={s.actions}>
+            <TouchableOpacity style={s.copyBtn} onPress={() => copyToClipboard(number)}>
+              <Ionicons name="copy-outline" size={16} color={theme.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.selectBtn} onPress={() => handleSaveToSurvey(item, number)}>
+              <Text style={s.selectBtnText}>Select</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    );
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={s.container}>
+      <View style={s.searchBox}>
+        <Ionicons name="search-outline" size={18} color={theme.textMuted} />
         <TextInput
-          style={styles.searchInput}
-          placeholder="Search contacts..."
+          style={s.searchInput}
+          placeholder="Search contacts…"
+          placeholderTextColor={theme.textLight}
           value={searchQuery}
-          onChangeText={setSearchQuery} />
-        
-        <Text style={styles.counter}>Total: {filteredContacts.length}</Text>
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={18} color={theme.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
+      <Text style={s.counter}>{filteredContacts.length} contacts</Text>
 
       <FlatList
         data={filteredContacts}
-        keyExtractor={(item, index) => item.id || index.toString()}
+        keyExtractor={(item, index) => item.id || String(index)}
         renderItem={renderItem}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        ListEmptyComponent={<Text style={styles.emptyText}>No contacts found.</Text>}
-        contentContainerStyle={{ paddingBottom: 20 }} />
-      
-    </View>);
-
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+        ListEmptyComponent={
+          <View style={s.emptyBox}>
+            <Ionicons name="people-outline" size={48} color={theme.textLight} />
+            <Text style={s.emptyText}>No contacts found</Text>
+          </View>
+        }
+        contentContainerStyle={{ paddingBottom: 24 }}
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
+  );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa' },
-  header: { padding: 16, backgroundColor: 'white', elevation: 2 },
-  searchInput: { backgroundColor: '#f1f3f5', padding: 12, borderRadius: 8, fontSize: 16 },
-  counter: { textAlign: 'right', marginTop: 8, color: '#666' },
-  card: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: 'white', alignItems: 'center' },
-  avatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-  avatarText: { color: 'white', fontSize: 24, fontWeight: 'bold' },
+const makeStyles = (theme) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg },
+  searchBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.card, margin: 16, borderRadius: 12, borderWidth: 1, borderColor: theme.border, paddingHorizontal: 14, gap: 8 },
+  searchInput: { flex: 1, fontSize: 15, color: theme.text, paddingVertical: 12 },
+  counter: { fontSize: 12, color: theme.textLight, fontWeight: '600', marginHorizontal: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  card: { flexDirection: 'row', padding: 14, marginHorizontal: 16, marginBottom: 10, backgroundColor: theme.card, borderRadius: 14, borderWidth: 1, borderColor: theme.border, alignItems: 'center' },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: theme.primaryMuted, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarText: { color: theme.primary, fontSize: 20, fontWeight: '800' },
   info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: 'bold' },
-  number: { fontSize: 14, color: '#666', marginTop: 4 },
-  actions: { flexDirection: 'row' },
-  actionBtn: { padding: 8, backgroundColor: '#e9ecef', borderRadius: 6, marginLeft: 8 },
-  saveBtn: { backgroundColor: '#28a745' },
-  actionText: { fontSize: 12, fontWeight: '600', color: '#333' },
-  emptyText: { textAlign: 'center', marginTop: 20, color: '#888' }
+  name: { fontSize: 15, fontWeight: '700', color: theme.text },
+  number: { fontSize: 13, color: theme.textMuted, marginTop: 2, fontWeight: '500' },
+  actions: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  copyBtn: { padding: 8, backgroundColor: theme.bg, borderRadius: 8 },
+  selectBtn: { paddingVertical: 8, paddingHorizontal: 14, backgroundColor: theme.success, borderRadius: 8 },
+  selectBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  emptyBox: { alignItems: 'center', paddingTop: 60, gap: 10 },
+  emptyText: { fontSize: 15, color: theme.textMuted, fontWeight: '600' },
 });

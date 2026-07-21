@@ -1,17 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Alert, ScrollView, Platform } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useSurvey } from '../context/SurveyContext';
+import { useTheme } from '../context/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 export default function ClipboardScreen() {
   const [clipboardContent, setClipboardContent] = useState('');
   const [pastedNotes, setPastedNotes] = useState('');
   const { draftSurvey, updateDraft } = useSurvey();
+  const { theme } = useTheme();
+  const router = useRouter();
+  const s = makeStyles(theme);
 
   const fetchClipboard = async () => {
-    const text = await Clipboard.getStringAsync();
-    setClipboardContent(text);
+    try {
+      const text = await Clipboard.getStringAsync();
+      setClipboardContent(text);
+    } catch (error) {
+      console.warn('Clipboard permission denied or unavailable:', error);
+      setClipboardContent('Clipboard access blocked/unavailable');
+    }
   };
 
   useEffect(() => {
@@ -19,15 +29,26 @@ export default function ClipboardScreen() {
   }, []);
 
   const handlePaste = async () => {
-    const text = await Clipboard.getStringAsync();
-    setPastedNotes((prev) => prev ? `${prev}\n${text}` : text);
-    Alert.alert('Success', 'Notes pasted from clipboard');
+    try {
+      const text = await Clipboard.getStringAsync();
+      setPastedNotes((prev) => prev ? `${prev}\n${text}` : text);
+      Alert.alert('Pasted ✅', 'Notes pasted from clipboard.');
+    } catch (error) {
+      Alert.alert(
+        'Permission Denied',
+        'Could not access the system clipboard. Please check your browser/app permissions or paste manually.'
+      );
+    }
   };
 
   const handleClearClipboard = async () => {
-    await Clipboard.setStringAsync('');
-    setClipboardContent('');
-    Alert.alert('Cleared', 'Clipboard data cleared');
+    try {
+      await Clipboard.setStringAsync('');
+      setClipboardContent('');
+      Alert.alert('Cleared ✅', 'Clipboard data cleared.');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to modify clipboard.');
+    }
   };
 
   const copyToClipboard = async (text, label) => {
@@ -37,84 +58,102 @@ export default function ClipboardScreen() {
     }
     await Clipboard.setStringAsync(text);
     fetchClipboard();
-    Alert.alert('Copied', `${label} copied to clipboard`);
+    Alert.alert('Copied ✅', `${label} copied to clipboard.`);
   };
 
   const saveNotes = () => {
     updateDraft({ notes: pastedNotes });
-    Alert.alert('Saved', 'Notes saved to survey draft');
+    if (Platform.OS === 'web') {
+      alert('Notes saved successfully!');
+      router.push('/preview');
+    } else {
+      Alert.alert('Saved ✅', 'Notes saved successfully!', [
+        { text: 'Go to Preview', onPress: () => router.push('/preview') },
+        { text: 'Stay Here', style: 'cancel' }
+      ]);
+    }
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.title}>Clipboard Manager</Text>
+    <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+      <Text style={s.title}>Clipboard Manager</Text>
+      <Text style={s.subtitle}>Quickly copy and paste survey data</Text>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Copy Data from Draft</Text>
+      {/* Copy Data Section */}
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>Copy Data from Draft</Text>
         
-        <TouchableOpacity style={styles.actionRow} onPress={() => copyToClipboard('SURVEY-' + Math.floor(Math.random() * 10000), 'Survey ID')}>
-          <Ionicons name="pricetag" size={20} color="#007AFF" />
-          <Text style={styles.actionText}>Copy Survey ID</Text>
+        <TouchableOpacity style={s.actionRow} onPress={() => copyToClipboard('SURVEY-' + Math.floor(Math.random() * 10000), 'Survey ID')}>
+          <Ionicons name="pricetag-outline" size={20} color={theme.primary} />
+          <Text style={s.actionText}>Copy Survey ID</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.textLight} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionRow} onPress={() => copyToClipboard(draftSurvey.contact?.number || '', 'Contact Number')}>
-          <Ionicons name="call" size={20} color="#007AFF" />
-          <Text style={styles.actionText}>Copy Contact Number</Text>
+        <TouchableOpacity style={s.actionRow} onPress={() => copyToClipboard(draftSurvey.contact?.number || '', 'Contact Number')}>
+          <Ionicons name="call-outline" size={20} color={theme.primary} />
+          <Text style={s.actionText}>Copy Contact Number</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.textLight} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionRow} onPress={() => {
+        <TouchableOpacity style={[s.actionRow, { borderBottomWidth: 0 }]} onPress={() => {
           const locStr = draftSurvey.location ? `${draftSurvey.location.lat}, ${draftSurvey.location.lng}` : '';
           copyToClipboard(locStr, 'Current Location');
         }}>
-          <Ionicons name="location" size={20} color="#007AFF" />
-          <Text style={styles.actionText}>Copy Current Location</Text>
+          <Ionicons name="location-outline" size={20} color={theme.primary} />
+          <Text style={s.actionText}>Copy Current Location</Text>
+          <Ionicons name="chevron-forward" size={16} color={theme.textLight} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Current Clipboard Data</Text>
-        <Text style={styles.clipboardText}>{clipboardContent || 'Empty'}</Text>
-        <TouchableOpacity style={[styles.button, styles.clearBtn]} onPress={handleClearClipboard}>
-          <Text style={styles.buttonText}>Clear Clipboard</Text>
+      {/* Clipboard Status Section */}
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>Current Clipboard Data</Text>
+        <Text style={s.clipboardText}>{clipboardContent || 'Empty'}</Text>
+        <TouchableOpacity style={[s.button, { backgroundColor: theme.danger }]} onPress={handleClearClipboard}>
+          <Ionicons name="trash-outline" size={18} color="#fff" />
+          <Text style={s.buttonText}>Clear Clipboard</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Paste Notes</Text>
+      {/* Paste & Edit Notes Section */}
+      <View style={s.card}>
+        <Text style={s.sectionTitle}>Paste Notes</Text>
         <TextInput
-          style={styles.textArea}
+          style={s.textArea}
           multiline
           numberOfLines={4}
           value={pastedNotes}
           onChangeText={setPastedNotes}
-          placeholder="Paste or type notes here..." />
+          placeholder="Paste or type notes here..."
+          placeholderTextColor={theme.textLight}
+        />
         
-        <View style={styles.btnRow}>
-          <TouchableOpacity style={[styles.button, styles.pasteBtn, { flex: 1, marginRight: 5 }]} onPress={handlePaste}>
-            <Text style={styles.buttonText}>Paste</Text>
+        <View style={s.btnRow}>
+          <TouchableOpacity style={[s.button, { backgroundColor: '#65676B', flex: 1 }]} onPress={handlePaste}>
+            <Ionicons name="clipboard-outline" size={18} color="#fff" />
+            <Text style={s.buttonText}>Paste</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.button, styles.saveBtn, { flex: 1, marginLeft: 5 }]} onPress={saveNotes}>
-            <Text style={styles.buttonText}>Save Notes</Text>
+          <TouchableOpacity style={[s.button, { backgroundColor: theme.success, flex: 1.2 }]} onPress={saveNotes}>
+            <Ionicons name="save-outline" size={18} color="#fff" />
+            <Text style={s.buttonText}>Save Notes</Text>
           </TouchableOpacity>
         </View>
       </View>
-    </ScrollView>);
-
+    </ScrollView>
+  );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8f9fa', padding: 16 },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  card: { backgroundColor: 'white', padding: 16, borderRadius: 12, marginBottom: 16, elevation: 2 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 12 },
-  actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  actionText: { fontSize: 16, marginLeft: 12, color: '#007AFF' },
-  clipboardText: { fontSize: 14, color: '#555', fontStyle: 'italic', marginBottom: 12, padding: 10, backgroundColor: '#f1f3f5', borderRadius: 8 },
-  button: { padding: 12, borderRadius: 8, alignItems: 'center' },
-  buttonText: { color: 'white', fontWeight: 'bold' },
-  clearBtn: { backgroundColor: '#dc3545' },
-  pasteBtn: { backgroundColor: '#6c757d' },
-  saveBtn: { backgroundColor: '#28a745' },
-  textArea: { borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, height: 100, textAlignVertical: 'top', marginBottom: 12 },
-  btnRow: { flexDirection: 'row', justifyContent: 'space-between' }
+const makeStyles = (theme) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg, padding: 20 },
+  title: { fontSize: 24, fontWeight: '800', color: theme.text, letterSpacing: -0.5 },
+  subtitle: { fontSize: 14, color: theme.textMuted, marginTop: 4, marginBottom: 24, fontWeight: '500' },
+  card: { backgroundColor: theme.card, padding: 20, borderRadius: 16, marginBottom: 20, borderWidth: 1, borderColor: theme.border },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 16 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border, gap: 12 },
+  actionText: { fontSize: 15, color: theme.primary, fontWeight: '600', flex: 1 },
+  clipboardText: { fontSize: 14, color: theme.textMuted, fontStyle: 'italic', marginBottom: 16, padding: 14, backgroundColor: theme.bg, borderRadius: 12, borderWidth: 1, borderColor: theme.border, lineHeight: 20 },
+  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 12, gap: 8 },
+  buttonText: { color: 'white', fontWeight: '700', fontSize: 15 },
+  textArea: { borderWidth: 1, borderColor: theme.inputBorder, borderRadius: 12, padding: 14, height: 120, textAlignVertical: 'top', marginBottom: 16, fontSize: 15, backgroundColor: theme.inputBg, color: theme.text },
+  btnRow: { flexDirection: 'row', gap: 12 }
 });

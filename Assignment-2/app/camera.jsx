@@ -1,13 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useSurvey } from '../context/SurveyContext';
+import { useTheme } from '../context/ThemeContext';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef(null);
   const { updateDraft, draftSurvey } = useSurvey();
+  const { theme } = useTheme();
   const router = useRouter();
 
   const [photoUri, setPhotoUri] = useState(draftSurvey.photoUri || null);
@@ -15,24 +18,22 @@ export default function CameraScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading indicator for opening camera per requirements
     const timer = setTimeout(() => setLoading(false), 500);
     return () => clearTimeout(timer);
   }, []);
 
-  if (!permission) {
-    return <View />;
-  }
+  if (!permission) return <View />;
 
   if (!permission.granted) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={{ textAlign: 'center', marginBottom: 20 }}>We need your permission to show the camera</Text>
-        <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.buttonText}>Grant Permission</Text>
+      <View style={[styles.center, { backgroundColor: theme.bg }]}>
+        <Ionicons name="camera-outline" size={60} color={theme.textLight} />
+        <Text style={[styles.permText, { color: theme.text }]}>Camera permission required</Text>
+        <TouchableOpacity style={[styles.btn, { backgroundColor: theme.primary }]} onPress={requestPermission}>
+          <Text style={styles.btnText}>Grant Permission</Text>
         </TouchableOpacity>
-      </View>);
-
+      </View>
+    );
   }
 
   const takePicture = async () => {
@@ -51,82 +52,95 @@ export default function CameraScreen() {
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete Photo', 'Are you sure you want to delete this photo?', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Delete', style: 'destructive', onPress: () => {
-        setPhotoUri(null);
-        setCaptureTime(null);
-        updateDraft({ photoUri: undefined });
-      } }]
-    );
+    Alert.alert('Delete Photo', 'Remove this photo from the survey?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: () => {
+          setPhotoUri(null);
+          setCaptureTime(null);
+          updateDraft({ photoUri: null });
+        }
+      },
+    ]);
   };
 
   const handleSave = () => {
     if (photoUri) {
       updateDraft({ photoUri });
-      Alert.alert('Saved', 'Photo attached to survey draft.');
-      router.back();
+      if (Platform.OS === 'web') {
+        alert('Survey saved successfully!');
+        router.back();
+      } else {
+        Alert.alert('Success', 'Survey saved successfully!', [
+          { text: 'OK', onPress: () => router.back() }
+        ]);
+      }
     }
   };
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-        <Text style={{ marginTop: 10 }}>Opening Camera...</Text>
-      </View>);
-
+      <View style={[styles.center, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.primary} />
+        <Text style={[styles.permText, { color: theme.textMuted }]}>Opening Camera…</Text>
+      </View>
+    );
   }
 
   if (photoUri) {
     return (
-      <View style={styles.container}>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
         <Image source={{ uri: photoUri }} style={styles.preview} />
-        {captureTime && <Text style={styles.timeText}>Captured at: {captureTime}</Text>}
-        
+        {captureTime && (
+          <Text style={styles.timeText}>📸 Captured at {captureTime}</Text>
+        )}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.actionBtn, styles.retakeBtn]} onPress={handleRetake}>
-            <Text style={styles.btnText}>Retake</Text>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#4B5563' }]} onPress={handleRetake}>
+            <Ionicons name="refresh" size={18} color="#fff" />
+            <Text style={styles.actionBtnText}>Retake</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, styles.saveBtn]} onPress={handleSave}>
-            <Text style={styles.btnText}>Save to Survey</Text>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#10b981' }]} onPress={handleSave}>
+            <Ionicons name="checkmark" size={18} color="#fff" />
+            <Text style={styles.actionBtnText}>Save</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionBtn, styles.deleteBtn]} onPress={handleDelete}>
-            <Text style={styles.btnText}>Delete</Text>
+          <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#ef4444' }]} onPress={handleDelete}>
+            <Ionicons name="trash" size={18} color="#fff" />
+            <Text style={styles.actionBtnText}>Delete</Text>
           </TouchableOpacity>
         </View>
-      </View>);
-
+      </View>
+    );
   }
 
   return (
-    <View style={styles.container}>
-      <CameraView style={styles.camera} facing="back" ref={cameraRef}>
-        <View style={styles.cameraUI}>
-          <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <CameraView style={{ flex: 1, justifyContent: 'flex-end' }} facing="back" ref={cameraRef}>
+        <View style={styles.cameraControls}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={22} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.captureBtn} onPress={takePicture}>
             <View style={styles.captureInner} />
           </TouchableOpacity>
+          <View style={{ width: 44 }} />
         </View>
       </CameraView>
-    </View>);
-
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-  camera: { flex: 1, justifyContent: 'flex-end' },
-  cameraUI: { padding: 30, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)' },
-  captureButton: { width: 70, height: 70, borderRadius: 35, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
-  captureInner: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#fff' },
-  button: { backgroundColor: '#007AFF', padding: 12, borderRadius: 8 },
-  buttonText: { color: 'white', fontWeight: 'bold' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16, padding: 24 },
+  permText: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  btn: { paddingVertical: 14, paddingHorizontal: 28, borderRadius: 12 },
+  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   preview: { flex: 1, resizeMode: 'contain' },
-  timeText: { color: 'white', textAlign: 'center', padding: 10, fontSize: 16 },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, backgroundColor: '#222' },
-  actionBtn: { padding: 12, borderRadius: 8, flex: 1, marginHorizontal: 5, alignItems: 'center' },
-  retakeBtn: { backgroundColor: '#ffc107' },
-  saveBtn: { backgroundColor: '#28a745' },
-  deleteBtn: { backgroundColor: '#dc3545' },
-  btnText: { color: 'white', fontWeight: 'bold' }
+  timeText: { color: '#fff', textAlign: 'center', padding: 10, fontSize: 14, backgroundColor: 'rgba(0,0,0,0.6)' },
+  actionRow: { flexDirection: 'row', padding: 20, backgroundColor: '#111', paddingBottom: 36, gap: 12 },
+  actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 12, gap: 6 },
+  actionBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  cameraControls: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 24, paddingBottom: 40, backgroundColor: 'rgba(0,0,0,0.4)' },
+  backBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  captureBtn: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+  captureInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff' },
 });
